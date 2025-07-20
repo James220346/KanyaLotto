@@ -1,0 +1,178 @@
+<!DOCTYPE html><html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>กัญญาพารวย</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(to bottom right, #ffe6f0, #e0f7fa);
+    }
+    h1 {
+      font-size: 2em;
+      animation: colorChange 4s infinite;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    @keyframes colorChange {
+      0% { color: red; }
+      25% { color: orange; }
+      50% { color: blue; }
+      75% { color: green; }
+      100% { color: red; }
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 8px;
+      max-width: 500px;
+      margin: 20px auto;
+    }
+    .num {
+      padding: 12px;
+      background: #ffffffcc;
+      text-align: center;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    .selected {
+      background: #ffb3c6;
+    }
+    .closed {
+      background: #ddd;
+      color: red;
+      position: relative;
+      pointer-events: none;
+    }
+    .closed::after {
+      content: "❤";
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      font-size: 16px;
+      color: red;
+    }
+    .center {
+      text-align: center;
+      margin-top: 20px;
+    }
+    input, select, button {
+      padding: 10px;
+      font-size: 1em;
+      margin: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    .total {
+      font-weight: bold;
+      font-size: 1.2em;
+      margin: 10px 0;
+    }
+    .slip-area { display: none; }
+  </style>
+</head>
+<body>
+  <h1>กัญญาพารวย</h1>
+  <div class="grid" id="numberGrid"></div>  <div class="center">
+    <input type="text" id="buyerName" placeholder="ชื่อผู้ซื้อ" />
+    <select id="paymentMethod">
+      <option value="โอนก่อน">โอนก่อน</option>
+      <option value="โอนทีหลัง">โอนทีหลัง</option>
+    </select>
+    <div class="slip-area" id="slipArea">
+      <input type="file" id="slipFile" />
+    </div>
+    <div class="total" id="total">รวม: 0 บาท</div>
+    <button onclick="submit()">ซื้อเลย</button><p style="margin-top:20px;">
+  <b>บัญชี:</b> กสิกรไทย 1261366912<br/>
+  <span id="copyText">สุกัญญา ธรรมบัวชา</span>
+  <button onclick="copyText()">คัดลอก</button>
+</p>
+
+  </div>  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+    const supabaseUrl = "https://htuugbpawqpsulbwgwxwc.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0dXVnYnBhd3Fwc3VsYndneHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3MjM3NDksImV4cCI6MjA2ODI5OTc0OX0.N_JV7AxvSgZZyREwQ-MM5rlUrxASuAVwTra0Vpd3RNw";
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const telegramToken = "7801823293:AAFhd3bFVzCPp7cEGYf4Ee2JIrjx03K9U9Y";
+    const telegramChatId = "8151328238";
+
+    const pricePerNum = 50;
+    const selectedNumbers = new Set();
+    const grid = document.getElementById("numberGrid");
+
+    for (let i = 0; i <= 99; i++) {
+      const num = i.toString().padStart(2, '0');
+      const div = document.createElement("div");
+      div.textContent = num;
+      div.className = "num";
+      div.onclick = () => toggle(num, div);
+      grid.appendChild(div);
+    }
+
+    function toggle(num, div) {
+      if (selectedNumbers.has(num)) {
+        selectedNumbers.delete(num);
+        div.classList.remove("selected");
+      } else {
+        selectedNumbers.add(num);
+        div.classList.add("selected");
+      }
+      document.getElementById("total").textContent = "รวม: " + (selectedNumbers.size * pricePerNum) + " บาท";
+    }
+
+    document.getElementById("paymentMethod").addEventListener("change", e => {
+      document.getElementById("slipArea").style.display = e.target.value === "โอนก่อน" ? "block" : "none";
+    });
+
+    async function submit() {
+      const name = document.getElementById("buyerName").value.trim();
+      const payment = document.getElementById("paymentMethod").value;
+      const slip = document.getElementById("slipFile").files[0];
+      if (!name || selectedNumbers.size === 0) return alert("กรุณากรอกชื่อและเลือกเลข");
+
+      if (payment === "โอนก่อน" && !slip) return alert("กรุณาแนบสลิป");
+
+      for (const number of selectedNumbers) {
+        await supabase.from("purchase").insert([{ number, buyer: name, payment }]);
+      }
+
+      const msg = `📌 มีการซื้อเลข\nชื่อ: ${name}\nเลข: ${Array.from(selectedNumbers).join(", ")}\nชำระ: ${payment}\nรวม: ${selectedNumbers.size * pricePerNum} บาท`;
+      await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: telegramChatId, text: msg })
+      });
+
+      if (payment === "โอนก่อน") {
+        const formData = new FormData();
+        formData.append("file", slip);
+        await fetch("https://file.io", { method: "POST", body: formData });
+      }
+
+      alert(`ซื้อสำเร็จ!\nเลขที่ซื้อ: ${Array.from(selectedNumbers).join(", ")}\nยอด: ${selectedNumbers.size * pricePerNum} บาท`);
+      location.reload();
+    }
+
+    function copyText() {
+      navigator.clipboard.writeText("กสิกรไทย 1261366912 สุกัญญา ธรรมบัวชา");
+      alert("คัดลอกแล้ว");
+    }
+
+    async function fetchClosed() {
+      const { data } = await supabase.from("purchase").select("number");
+      const closed = new Set(data.map(d => d.number));
+      for (const div of grid.children) {
+        if (closed.has(div.textContent)) {
+          div.classList.add("closed");
+        }
+      }
+    }
+    fetchClosed();
+  </script></body>
+</html>
